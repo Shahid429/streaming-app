@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@next/bundle-analyzer": "^15.1.4",
     "framer-motion": "^11.18.0",
     "hls.js": "^1.5.19",
     "lucide-react": "^0.471.1",
