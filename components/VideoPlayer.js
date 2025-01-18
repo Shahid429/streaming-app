@@ -1,22 +1,17 @@
 import React from 'react';
-import ReactPlayer from 'react-player';
 
 const VideoPlayer = ({ m3u8Url }) => {
+  const iframeSrc = `https://www.hlsplayer.net/embed?type=m3u8&src=${encodeURIComponent(m3u8Url)}`;
+
   return (
     <div className="video-container">
-      <ReactPlayer
-        url={m3u8Url}
-        controls={true}
+      <iframe
+        src={iframeSrc}
         width="100%"
         height="100%"
-        playing={true}
-        config={{
-          file: {
-            attributes: {
-              crossOrigin: 'anonymous', // Necessary for cross-origin requests
-            },
-          },
-        }}
+        frameBorder="0"
+        allowFullScreen
+        title="Video Player"
       />
     </div>
   );
