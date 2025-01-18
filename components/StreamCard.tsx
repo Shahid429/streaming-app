@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Fan, Play, TrendingUp, Users, Signal } from "lucide-react";
+import { Fan, Play, Users, Signal } from "lucide-react";
 import { motion } from "framer-motion";
 
 type Stream = {
