@@ -1,32 +1,43 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from 'react';
+import Script from 'next/script';
 
 interface VideoPlayerProps {
   m3u8Url: string;
 }
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ m3u8Url }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
-    let player: any = null;
+    // CORS handling
+    const originalFetch = window.fetch;
+    window.fetch = function(url: string, options: RequestInit = {}) {
+      if (url.includes('dai.google.com')) {
+        options.mode = 'cors';
+        options.credentials = 'omit';
+        if (!options.headers) {
+          options.headers = {};
+        }
+        delete (options.headers as any)['Origin'];
+        delete (options.headers as any)['Referer'];
+      }
+      return originalFetch(url, options);
+    };
 
     const initPlayer = async () => {
       try {
         // @ts-ignore
         window.shaka.polyfill.installAll();
+
         // @ts-ignore
-        if (window.shaka.Player.isBrowserSupported() && videoRef.current && containerRef.current) {
+        if (window.shaka.Player.isBrowserSupported()) {
+          const video = document.getElementById('video') as HTMLVideoElement;
+          const videoContainer = document.querySelector('[data-shaka-player-container]');
+          
           // @ts-ignore
-          player = new window.shaka.Player(videoRef.current);
+          const player = new window.shaka.Player(video);
           // @ts-ignore
-          const ui = new window.shaka.ui.Overlay(
-            player,
-            containerRef.current,
-            videoRef.current
-          );
+          const ui = new window.shaka.ui.Overlay(player, videoContainer, video);
 
           player.configure({
             streaming: {
@@ -61,7 +72,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ m3u8Url }) => {
             }
           });
 
-          player.getNetworkingEngine().registerRequestFilter((type: any, request: any) => {
+          player.getNetworkingEngine().registerRequestFilter(function(type: any, request: any) {
             request.allowCrossSiteCredentials = false;
             if (request.headers) {
               delete request.headers['Origin'];
@@ -69,7 +80,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ m3u8Url }) => {
             }
           });
 
-          player.addEventListener('error', (event: any) => {
+          player.addEventListener('error', function(event: any) {
             console.error('Error code', event.detail.code, 'object', event.detail);
           });
 
@@ -96,64 +107,90 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ m3u8Url }) => {
           });
 
           console.log('Player initialized successfully');
+        } else {
+          console.error('Browser not supported!');
         }
       } catch (error) {
         console.error('Error initializing player:', error);
       }
     };
 
-    // Load Shaka Player scripts and CSS
-    const loadShakaPlayer = async () => {
-      if (!document.querySelector('script[src*="shaka-player"]')) {
-        const script = document.createElement('script');
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/shaka-player.ui.min.js";
-        script.crossOrigin = "anonymous";
-        document.head.appendChild(script);
-
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/controls.min.css";
-        link.crossOrigin = "anonymous";
-        document.head.appendChild(link);
-
-        script.onload = () => {
-          initPlayer();
-        };
+    // Initialize when Shaka is loaded
+    const handleShakaLoaded = () => {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPlayer);
       } else {
         initPlayer();
       }
     };
 
-    loadShakaPlayer();
-
-    // Cleanup
-    return () => {
-      if (player) {
-        player.destroy();
-      }
-    };
+    // Call initialization when component mounts
+    if (typeof window !== 'undefined' && (window as any).shaka) {
+      handleShakaLoaded();
+    }
   }, [m3u8Url]);
 
   return (
-    <div 
-      ref={containerRef}
-      data-shaka-player-container
-      style={{ 
-        width: "100%", 
-        height: "100%",
-        backgroundColor: "black" 
-      }}
-    >
-      <video 
-        ref={videoRef}
-        data-shaka-player
-        autoPlay
-        style={{ 
-          width: "100%", 
-          height: "100%" 
+    <>
+      <Script
+        src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/shaka-player.ui.min.js"
+        crossOrigin="anonymous"
+        onLoad={() => {
+          console.log('Shaka Player loaded');
+          // Initialize player when script is loaded
+          if (typeof window !== 'undefined') {
+            const event = new Event('shakaLoaded');
+            window.dispatchEvent(event);
+          }
         }}
       />
-    </div>
+      <Script
+        src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js"
+        defer
+      />
+      <style jsx global>{`
+        html, body {
+          margin: 0;
+          padding: 0;
+          height: 100%;
+          width: 100%;
+          overflow: hidden;
+        }
+
+        #player-container {
+          height: 100%;
+          width: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          background-color: black;
+        }
+
+        .shaka-video-container {
+          height: 100%;
+          width: 100%;
+        }
+
+        video {
+          height: 100%;
+          width: 100%;
+        }
+
+        .shaka-spinner-container {
+          display: none;
+        }
+      `}</style>
+      <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/controls.min.css"
+        crossOrigin="anonymous"
+      />
+      <div id="player-container">
+        <div data-shaka-player-container className="shaka-video-container">
+          <video autoPlay data-shaka-player id="video" poster="#" />
+        </div>
+      </div>
+    </>
   );
 };
 
