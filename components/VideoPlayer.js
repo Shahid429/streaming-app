@@ -6,23 +6,34 @@ import Script from 'next/script';
 const VideoPlayer = ({ m3u8Url }) => {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
+  const playerRef = useRef(null);
 
   useEffect(() => {
-    let player = null;
+    const loadShaka = async () => {
+      if (!window.shaka) {
+        console.log("Shaka is not loaded yet");
+        return;
+      }
 
-    const initPlayer = async () => {
       try {
         window.shaka.polyfill.installAll();
 
-        if (window.shaka.Player.isBrowserSupported() && videoRef.current && containerRef.current) {
-          player = new window.shaka.Player(videoRef.current);
+        if (window.shaka.Player.isBrowserSupported()) {
+          // Destroy existing player if it exists
+          if (playerRef.current) {
+            playerRef.current.destroy();
+          }
+
+          // Create player instance
+          playerRef.current = new window.shaka.Player(videoRef.current);
           const ui = new window.shaka.ui.Overlay(
-            player,
+            playerRef.current,
             containerRef.current,
             videoRef.current
           );
 
-          player.configure({
+          // Configure player
+          playerRef.current.configure({
             streaming: {
               bufferingGoal: 60,
               rebufferingGoal: 30,
@@ -55,7 +66,8 @@ const VideoPlayer = ({ m3u8Url }) => {
             }
           });
 
-          player.getNetworkingEngine().registerRequestFilter(function(type, request) {
+          // Add network filters
+          playerRef.current.getNetworkingEngine().registerRequestFilter((type, request) => {
             request.allowCrossSiteCredentials = false;
             if (request.headers) {
               delete request.headers['Origin'];
@@ -63,33 +75,39 @@ const VideoPlayer = ({ m3u8Url }) => {
             }
           });
 
-          player.addEventListener('error', function(event) {
+          // Error handling
+          playerRef.current.addEventListener('error', (event) => {
             console.error('Error code', event.detail.code, 'object', event.detail);
           });
 
-          await player.load(m3u8Url);
+          try {
+            // Load content
+            await playerRef.current.load(m3u8Url);
+            console.log('Stream loaded');
 
-          ui.configure({
-            addBigPlayButton: true,
-            addSeekBar: true,
-            controlPanelElements: [
-              'play_pause',
-              'time_and_duration',
-              'spacer',
-              'mute',
-              'volume',
-              'quality',
-              'fullscreen',
-            ],
-            overflowMenuButtons: [
-              'quality',
-              'captions',
-              'language',
-              'picture_in_picture'
-            ]
-          });
-
-          console.log('Player initialized successfully');
+            // Configure UI
+            ui.configure({
+              addBigPlayButton: true,
+              addSeekBar: true,
+              controlPanelElements: [
+                'play_pause',
+                'time_and_duration',
+                'spacer',
+                'mute',
+                'volume',
+                'quality',
+                'fullscreen',
+              ],
+              overflowMenuButtons: [
+                'quality',
+                'captions',
+                'language',
+                'picture_in_picture'
+              ]
+            });
+          } catch (error) {
+            console.error('Error loading stream:', error);
+          }
         } else {
           console.error('Browser not supported!');
         }
@@ -98,30 +116,39 @@ const VideoPlayer = ({ m3u8Url }) => {
       }
     };
 
-    // Initialize when script is loaded
-    if (typeof window !== 'undefined' && window.shaka) {
-      initPlayer();
+    // Handle script load
+    const handleShakaLoaded = () => {
+      loadShaka();
+    };
+
+    if (window.shaka) {
+      handleShakaLoaded();
     }
 
-    // Cleanup on unmount
+    // Clean up
     return () => {
-      if (player) {
-        player.destroy();
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
       }
     };
   }, [m3u8Url]);
 
   return (
-    <>
+    <div style={{ width: "100%", height: "100%" }}>
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/shaka-player.ui.min.js"
-        crossOrigin="anonymous"
-        onLoad={() => console.log('Shaka Player loaded')}
+        strategy="beforeInteractive"
+        onLoad={() => {
+          console.log('Shaka Player loaded');
+          if (window.shaka) {
+            window.shaka.polyfill.installAll();
+          }
+        }}
       />
       <link
         rel="stylesheet"
         href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/controls.min.css"
-        crossOrigin="anonymous"
       />
       <div 
         ref={containerRef}
@@ -130,9 +157,7 @@ const VideoPlayer = ({ m3u8Url }) => {
           width: "100%", 
           height: "500px",
           backgroundColor: "black",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center"
+          position: "relative"
         }}
       >
         <video 
@@ -141,7 +166,10 @@ const VideoPlayer = ({ m3u8Url }) => {
           autoPlay
           style={{ 
             width: "100%", 
-            height: "100%" 
+            height: "100%",
+            position: "absolute",
+            top: 0,
+            left: 0
           }}
         />
       </div>
@@ -150,11 +178,18 @@ const VideoPlayer = ({ m3u8Url }) => {
           width: 100% !important;
           height: 100% !important;
         }
+        video {
+          width: 100% !important;
+          height: 100% !important;
+        }
         .shaka-spinner-container {
           display: none;
         }
+        .shaka-controls-container {
+          width: 100% !important;
+        }
       `}</style>
-    </>
+    </div>
   );
 };
 
