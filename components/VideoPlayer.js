@@ -1,71 +1,114 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import Head from 'next/head';
 
 const VideoPlayer = ({ m3u8Url }) => {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const playerRef = useRef(null);
+  const uiRef = useRef(null);
 
   useEffect(() => {
-    let shakaLoaded = false;
+    let shakaScript = null;
+    let styleSheet = null;
 
     const loadShakaPlayer = () => {
       return new Promise((resolve, reject) => {
-        if (window.shaka) {
-          resolve();
-          return;
-        }
+        // Load script
+        shakaScript = document.createElement('script');
+        shakaScript.src = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.ui.min.js";
+        shakaScript.async = true;
+        shakaScript.onload = resolve;
+        shakaScript.onerror = reject;
+        document.head.appendChild(shakaScript);
 
-        const script = document.createElement('script');
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/shaka-player.ui.min.js";
-        script.async = true;
-        script.onload = () => resolve();
-        script.onerror = (error) => reject(error);
-        document.head.appendChild(script);
-
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/controls.min.css";
-        document.head.appendChild(link);
+        // Load stylesheet
+        styleSheet = document.createElement('link');
+        styleSheet.rel = 'stylesheet';
+        styleSheet.href = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/controls.min.css";
+        document.head.appendChild(styleSheet);
       });
     };
 
     const initPlayer = async () => {
-      try {
+      if (!window.shaka) {
         await loadShakaPlayer();
-        
-        if (!shakaLoaded) {
-          window.shaka.polyfill.installAll();
-          shakaLoaded = true;
-        }
+      }
+
+      try {
+        window.shaka.polyfill.installAll();
 
         if (window.shaka.Player.isBrowserSupported() && videoRef.current && containerRef.current) {
+          // Destroy existing player if it exists
           if (playerRef.current) {
             playerRef.current.destroy();
           }
 
+          // Create player
           playerRef.current = new window.shaka.Player(videoRef.current);
+
+          // Create UI
+          const video = videoRef.current;
+          const container = containerRef.current;
           const ui = new window.shaka.ui.Overlay(
             playerRef.current,
-            containerRef.current,
-            videoRef.current
+            container,
+            video
           );
+          uiRef.current = ui;
 
+          // Configure player
           playerRef.current.configure({
             streaming: {
               bufferingGoal: 60,
               rebufferingGoal: 30,
-              bufferBehind: 30
+              bufferBehind: 30,
+              retryParameters: {
+                timeout: 0,
+                maxAttempts: 5,
+                baseDelay: 1000,
+                backoffFactor: 2,
+                fuzzFactor: 0.5
+              }
             },
             manifest: {
-              dash: {
-                ignoreSuggestedPresentationDelay: true
+              retryParameters: {
+                timeout: 0,
+                maxAttempts: 5,
+                baseDelay: 1000,
+                backoffFactor: 2,
+                fuzzFactor: 0.5
               }
+            },
+            abr: {
+              enabled: true,
+              defaultBandwidthEstimate: 1000000,
+              switchInterval: 1
             }
           });
 
+          // Configure UI
+          ui.configure({
+            addBigPlayButton: true,
+            addSeekBar: true,
+            controlPanelElements: [
+              'play_pause',
+              'time_and_duration',
+              'spacer',
+              'mute',
+              'volume',
+              'quality',
+              'fullscreen',
+            ],
+            overflowMenuButtons: [
+              'quality',
+              'captions',
+              'language',
+              'picture_in_picture'
+            ]
+          });
+
+          // Add network filters
           playerRef.current.getNetworkingEngine().registerRequestFilter((type, request) => {
             request.allowCrossSiteCredentials = false;
             if (request.headers) {
@@ -74,24 +117,17 @@ const VideoPlayer = ({ m3u8Url }) => {
             }
           });
 
-          try {
-            await playerRef.current.load(m3u8Url);
-            console.log('Stream loaded successfully');
+          // Error handling
+          playerRef.current.addEventListener('error', (event) => {
+            console.error('Player error:', event.detail);
+          });
 
-            ui.configure({
-              addBigPlayButton: true,
-              controlPanelElements: [
-                'play_pause',
-                'time_and_duration',
-                'spacer',
-                'mute',
-                'volume',
-                'fullscreen'
-              ]
-            });
-          } catch (error) {
-            console.error('Error loading stream:', error);
-          }
+          // Load content
+          await playerRef.current.load(m3u8Url);
+          console.log('Stream loaded successfully');
+
+        } else {
+          console.error('Browser not supported!');
         }
       } catch (error) {
         console.error('Error initializing player:', error);
@@ -100,46 +136,60 @@ const VideoPlayer = ({ m3u8Url }) => {
 
     initPlayer();
 
+    // Cleanup
     return () => {
       if (playerRef.current) {
         playerRef.current.destroy();
+        playerRef.current = null;
+      }
+      if (shakaScript && shakaScript.parentNode) {
+        shakaScript.parentNode.removeChild(shakaScript);
+      }
+      if (styleSheet && styleSheet.parentNode) {
+        styleSheet.parentNode.removeChild(styleSheet);
       }
     };
   }, [m3u8Url]);
 
   return (
-    <>
-      <Head>
-        <meta name="referrer" content="no-referrer" />
-      </Head>
-      <div 
-        ref={containerRef}
-        data-shaka-player-container
+    <div 
+      ref={containerRef}
+      data-shaka-player-container
+      style={{ 
+        width: "100%", 
+        height: "500px",
+        backgroundColor: "black",
+        position: "relative"
+      }}
+    >
+      <video 
+        ref={videoRef}
+        data-shaka-player
         style={{ 
           width: "100%", 
-          height: "500px",
-          backgroundColor: "black"
+          height: "100%"
         }}
-      >
-        <video 
-          ref={videoRef}
-          data-shaka-player
-          style={{ 
-            width: "100%", 
-            height: "100%"
-          }}
-        />
-      </div>
+      />
       <style jsx global>{`
         .shaka-video-container {
+          width: 100% !important;
+          height: 100% !important;
+        }
+        .shaka-video-container video {
           width: 100% !important;
           height: 100% !important;
         }
         .shaka-spinner-container {
           display: none;
         }
+        .shaka-controls-container {
+          width: 100% !important;
+        }
+        .shaka-controls-container[shown="true"] {
+          background: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+        }
       `}</style>
-    </>
+    </div>
   );
 };
 
