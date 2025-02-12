@@ -1,38 +1,42 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const VideoPlayer = ({ m3u8Url }) => {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const playerRef = useRef(null);
   const uiRef = useRef(null);
+  const [fallbackPlayer, setFallbackPlayer] = useState(false);
+  const [isPlayerLoaded, setIsPlayerLoaded] = useState(false);
 
   useEffect(() => {
-    // Load Shaka Player library
-    const loadShakaPlayer = async () => {
-      try {
-        // Load Shaka Player script
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/shaka-player.ui.min.js");
-        // Load Shaka Player CSS
-        loadCSS("https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/controls.min.css");
-        
-        // Initialize player
-        await initPlayer();
-      } catch (error) {
-        console.error("Error loading Shaka Player:", error);
-      }
-    };
+    // Load Shaka Player only once
+    if (!isPlayerLoaded) {
+      loadShakaPlayer();
+    } else if (m3u8Url && playerRef.current) {
+      // If player is loaded and URL changes, load new source
+      initializeStream(m3u8Url);
+    }
 
-    loadShakaPlayer();
-
-    // Cleanup
     return () => {
       if (playerRef.current) {
         playerRef.current.destroy();
       }
     };
-  }, [m3u8Url]);
+  }, [m3u8Url, isPlayerLoaded]);
+
+  const loadShakaPlayer = async () => {
+    try {
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/shaka-player.ui.min.js");
+      loadCSS("https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.6/controls.min.css");
+      setIsPlayerLoaded(true);
+      await initPlayer();
+    } catch (error) {
+      console.error("Error loading Shaka Player:", error);
+      setFallbackPlayer(true);
+    }
+  };
 
   const loadScript = (src) => {
     return new Promise((resolve, reject) => {
@@ -53,13 +57,24 @@ const VideoPlayer = ({ m3u8Url }) => {
     document.head.appendChild(link);
   };
 
+  const initializeStream = async (streamUrl) => {
+    try {
+      if (playerRef.current) {
+        await playerRef.current.load(streamUrl);
+        console.log('New stream loaded successfully');
+      }
+    } catch (error) {
+      console.error('Error loading stream:', error);
+      setFallbackPlayer(true);
+    }
+  };
+
   const initPlayer = async () => {
     try {
       const shaka = window.shaka;
       shaka.polyfill.installAll();
 
       if (shaka.Player.isBrowserSupported()) {
-        // Create player instance
         playerRef.current = new shaka.Player(videoRef.current);
         uiRef.current = new shaka.ui.Overlay(
           playerRef.current,
@@ -67,7 +82,6 @@ const VideoPlayer = ({ m3u8Url }) => {
           videoRef.current
         );
 
-        // Configure player
         playerRef.current.configure({
           streaming: {
             bufferingGoal: 60,
@@ -101,7 +115,6 @@ const VideoPlayer = ({ m3u8Url }) => {
           }
         });
 
-        // Add network filters
         playerRef.current.getNetworkingEngine().registerRequestFilter((type, request) => {
           request.allowCrossSiteCredentials = false;
           if (request.headers) {
@@ -110,16 +123,13 @@ const VideoPlayer = ({ m3u8Url }) => {
           }
         });
 
-        // Error handling
         playerRef.current.addEventListener('error', (event) => {
           console.error('Error code', event.detail.code, 'object', event.detail);
-          // Fallback to iframe player if needed
           if (event.detail.code === 1001 || event.detail.code === 1002) {
             setFallbackPlayer(true);
           }
         });
 
-        // Configure UI
         uiRef.current.configure({
           addBigPlayButton: true,
           addSeekBar: true,
@@ -140,19 +150,19 @@ const VideoPlayer = ({ m3u8Url }) => {
           ]
         });
 
-        // Load content
-        await playerRef.current.load(m3u8Url);
-        console.log('Player initialized successfully');
+        if (m3u8Url) {
+          await initializeStream(m3u8Url);
+        }
 
       } else {
         console.error('Browser not supported!');
+        setFallbackPlayer(true);
       }
     } catch (error) {
       console.error('Error initializing player:', error);
+      setFallbackPlayer(true);
     }
   };
-
-  const [fallbackPlayer, setFallbackPlayer] = React.useState(false);
 
   if (fallbackPlayer) {
     return (
