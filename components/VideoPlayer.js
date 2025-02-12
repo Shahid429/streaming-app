@@ -8,32 +8,51 @@ const VideoPlayer = ({ m3u8Url }) => {
   const playerRef = useRef(null);
 
   useEffect(() => {
+    let shakaInstance = null;
+
+    const loadShakaPlayer = async () => {
+      // Add script if not already present
+      if (!document.querySelector('script[src*="shaka-player"]')) {
+        const script = document.createElement('script');
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.ui.min.js";
+        script.async = true;
+        document.head.appendChild(script);
+
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/controls.min.css";
+        document.head.appendChild(link);
+
+        await new Promise((resolve) => {
+          script.onload = resolve;
+        });
+      }
+    };
+
     const initPlayer = async () => {
       try {
-        // Load Shaka Player library if not loaded
-        if (!window.shaka) {
-          const script = document.createElement('script');
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.ui.min.js";
-          script.async = true;
-          await new Promise((resolve, reject) => {
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-          });
+        await loadShakaPlayer();
 
-          const link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/controls.min.css";
-          document.head.appendChild(link);
+        // Wait for Shaka to be available
+        if (!window.shaka) {
+          console.log('Waiting for Shaka to load...');
+          return;
         }
 
-        // Install shaka polyfills
+        console.log('Initializing Shaka Player...');
+
+        // Install polyfills
         window.shaka.polyfill.installAll();
 
-        // Check browser support
-        if (window.shaka.Player.isBrowserSupported()) {
-          // Create a Player instance
+        if (window.shaka.Player.isBrowserSupported() && videoRef.current && containerRef.current) {
+          // Destroy existing player if any
+          if (playerRef.current) {
+            playerRef.current.destroy();
+          }
+
+          // Create player instance
           playerRef.current = new window.shaka.Player(videoRef.current);
+          shakaInstance = playerRef.current;
 
           // Create UI
           const ui = new window.shaka.ui.Overlay(
@@ -47,7 +66,14 @@ const VideoPlayer = ({ m3u8Url }) => {
             streaming: {
               bufferingGoal: 60,
               rebufferingGoal: 30,
-              bufferBehind: 30
+              bufferBehind: 30,
+              retryParameters: {
+                timeout: 0,
+                maxAttempts: 5,
+                baseDelay: 1000,
+                backoffFactor: 2,
+                fuzzFactor: 0.5
+              }
             }
           });
 
@@ -65,7 +91,7 @@ const VideoPlayer = ({ m3u8Url }) => {
             ]
           });
 
-          // Handle network requests
+          // Add network filters
           playerRef.current.getNetworkingEngine().registerRequestFilter((type, request) => {
             request.allowCrossSiteCredentials = false;
             if (request.headers) {
@@ -74,70 +100,71 @@ const VideoPlayer = ({ m3u8Url }) => {
             }
           });
 
-          // Load the manifest
-          await playerRef.current.load(m3u8Url);
-          console.log('Manifest loaded');
+          // Error handling
+          playerRef.current.addEventListener('error', (event) => {
+            console.error('Player error:', event.detail);
+          });
+
+          console.log('Loading content:', m3u8Url);
           
-          // Start playback
-          videoRef.current.play();
+          // Load the content
+          try {
+            await playerRef.current.load(m3u8Url);
+            console.log('Content loaded successfully');
+            videoRef.current.play();
+          } catch (error) {
+            console.error('Error loading content:', error);
+          }
+        } else {
+          console.error('Browser not supported or refs not available');
         }
       } catch (error) {
-        console.error('Error loading player:', error);
+        console.error('Error initializing player:', error);
       }
     };
 
-    initPlayer();
+    if (m3u8Url) {
+      initPlayer();
+    }
 
     // Cleanup
     return () => {
-      if (playerRef.current) {
-        playerRef.current.destroy();
+      if (shakaInstance) {
+        shakaInstance.destroy();
       }
     };
   }, [m3u8Url]);
 
   return (
-    <div style={{ width: "100%", height: "100%" }}>
+    <div className="w-full aspect-video bg-black rounded-lg overflow-hidden">
       <div 
         ref={containerRef}
-        className="video-container"
-        style={{ 
-          width: "100%", 
-          height: "500px",
-          maxHeight: "100vh",
-          backgroundColor: "#000"
-        }}
+        data-shaka-player-container
+        className="w-full h-full"
       >
         <video 
           ref={videoRef}
-          style={{
-            width: "100%",
-            height: "100%"
-          }}
-          autoPlay
           data-shaka-player
-          poster=""
+          className="w-full h-full"
+          autoPlay
+          playsInline
         />
       </div>
       <style jsx global>{`
-        .video-container {
-          position: relative;
-          width: 100%;
-          height: 100%;
-        }
-        video {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-        }
         .shaka-video-container {
           width: 100% !important;
           height: 100% !important;
         }
+        video {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: contain;
+        }
         .shaka-controls-container {
           width: 100% !important;
+        }
+        .shaka-overflow-menu {
+          min-width: 200px;
         }
       `}</style>
     </div>
