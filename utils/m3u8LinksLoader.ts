@@ -24,9 +24,9 @@ export const fetchM3u8Links = async (): Promise<{ [key: string]: string }> => {
     const response = await fetch(apiUrl, {
       headers: {
         'Accept': 'application/vnd.github.v3.raw',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      }
+        // Removed problematic headers
+      },
+      mode: 'cors' // Explicitly set CORS mode
     });
 
     if (!response.ok) {
@@ -64,10 +64,9 @@ export const checkForUpdates = async (): Promise<boolean> => {
     const apiUrl = 'https://api.github.com/repos/Shahid429/Link/contents/m3u8Links.json';
     const response = await fetch(apiUrl, {
       headers: {
-        'Accept': 'application/vnd.github.v3.raw',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      }
+        'Accept': 'application/vnd.github.v3.raw'
+      },
+      mode: 'cors'
     });
 
     if (!response.ok) {
@@ -76,17 +75,16 @@ export const checkForUpdates = async (): Promise<boolean> => {
 
     const newConfig = await response.json();
 
-    // Compare with current config
     if (
       state.currentConfig && 
       JSON.stringify(newConfig) !== JSON.stringify(state.currentConfig)
     ) {
       state.currentConfig = newConfig;
       state.lastFetchTime = Date.now();
-      return true; // Config was updated
+      return true;
     }
 
-    return false; // No updates
+    return false;
   } catch (error) {
     console.error("Error checking for updates:", error);
     return false;
@@ -97,9 +95,9 @@ export const preloadM3u8Manifest = async (url: string): Promise<void> => {
   try {
     const response = await fetch(url, {
       method: 'HEAD',
+      mode: 'cors',
       headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Accept': 'application/vnd.github.v3.raw'
       }
     });
     
@@ -113,7 +111,7 @@ export const preloadM3u8Manifest = async (url: string): Promise<void> => {
 
 // Optional: Setup automatic update checking
 export const setupAutoUpdates = (
-  interval: number = 5 * 60 * 1000, // 5 minutes default
+  interval: number = 5 * 60 * 1000,
   onUpdate?: () => void
 ) => {
   setInterval(async () => {
@@ -126,6 +124,6 @@ export const setupAutoUpdates = (
 
 // Optional: Force refresh the config
 export const forceRefresh = async (): Promise<{ [key: string]: string }> => {
-  state.lastFetchTime = 0; // Reset the cache
+  state.lastFetchTime = 0;
   return await fetchM3u8Links();
 };
