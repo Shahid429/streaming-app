@@ -3,27 +3,19 @@
 import React, { useEffect, useRef } from "react";
 import Script from 'next/script';
 
-interface VideoPlayerProps {
-  m3u8Url: string;
-}
-
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ m3u8Url }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+const VideoPlayer = ({ m3u8Url }) => {
+  const videoRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    let player: any = null;
+    let player = null;
 
     const initPlayer = async () => {
       try {
-        // @ts-ignore
         window.shaka.polyfill.installAll();
 
-        // @ts-ignore
         if (window.shaka.Player.isBrowserSupported() && videoRef.current && containerRef.current) {
-          // @ts-ignore
           player = new window.shaka.Player(videoRef.current);
-          // @ts-ignore
           const ui = new window.shaka.ui.Overlay(
             player,
             containerRef.current,
@@ -63,7 +55,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ m3u8Url }) => {
             }
           });
 
-          player.getNetworkingEngine().registerRequestFilter(function(type: any, request: any) {
+          player.getNetworkingEngine().registerRequestFilter(function(type, request) {
             request.allowCrossSiteCredentials = false;
             if (request.headers) {
               delete request.headers['Origin'];
@@ -71,7 +63,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ m3u8Url }) => {
             }
           });
 
-          player.addEventListener('error', function(event: any) {
+          player.addEventListener('error', function(event) {
             console.error('Error code', event.detail.code, 'object', event.detail);
           });
 
@@ -107,7 +99,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ m3u8Url }) => {
     };
 
     // Initialize when script is loaded
-    if (typeof window !== 'undefined' && (window as any).shaka) {
+    if (typeof window !== 'undefined' && window.shaka) {
       initPlayer();
     }
 
