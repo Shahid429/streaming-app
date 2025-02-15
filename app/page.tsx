@@ -15,7 +15,7 @@ interface Match {
 }
 
 const API_URL = 'https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json';
-const PLAYER_URL = 'https://shz.al/mHYz/Player.html?dtv=';
+const PLAYER_URL = 'https://t.me/KashmirFC';
 
 export default function Home() {
   const [matches, setMatches] = useState<Match[]>([]);
