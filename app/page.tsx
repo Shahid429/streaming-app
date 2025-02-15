@@ -15,7 +15,7 @@ interface Match {
 }
 
 const API_URL = 'https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json';
-const PLAYER_URL = 'https://t.me/KashmirFC';
+const PLAYER_URL = 'https://shz.al/mHYz/Player.html?dtv=';
 
 export default function Home() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -47,8 +47,8 @@ export default function Home() {
   };
 
   const handleTelegramClick = () => {
-    if (confirm("Join Our Telegram Channel @livecrichdofficial")) {
-      window.location.href = "https://telegram.me/livecrichdofficial";
+    if (confirm("Join Our Telegram Channel @KashmirFC")) {
+      window.location.href = "https://t.me/KashmirFC";
     }
   };
 
